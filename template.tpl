@@ -14,7 +14,7 @@ ___INFO___
   "version": 1,
   "securityGroups": [],
   "displayName": "MD5 Hash",
-  "description": "Produces the MD5 hash of the input value.",
+  "description": "Produces the MD5 hash of the input value. This variable works only for Stape-hosted GTM containers.",
   "containerContexts": [
     "SERVER"
   ]
@@ -29,7 +29,7 @@ ___TEMPLATE_PARAMETERS___
     "name": "inputValue",
     "displayName": "Value to be hashed",
     "simpleValueType": true,
-    "help": "Enter the value to be MD5 hashed.",
+    "help": "Enter the value to be MD5 hashed.\u003cbr/\u003eObs.: this variable works only for Stape-hosted GTM containers.",
     "valueValidators": [
       {
         "type": "NON_EMPTY"
