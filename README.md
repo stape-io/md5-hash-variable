@@ -11,6 +11,8 @@ The **MD5 Hash Variable** for Google Tag Manager Server Container allows you to 
    - **Console Logging**: Control whether logs should be displayed in the console during debugging or production.
    - **BigQuery Logging**: Optionally log hash-related data to Google BigQuery for further analysis (requires BigQuery setup).
 
+*Note: this variable only works for Stape-hosted GTM containers.*
+
 ## Parameters
 
 - **Value to be Hashed**: The string or value you want to convert to an MD5 hash.
