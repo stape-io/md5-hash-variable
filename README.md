@@ -29,3 +29,6 @@ _Note: this variable only works for Stape-hosted GTM containers._
 ## Open Source
 
 The **MD5 Hash Variable** for GTM Server is developed and maintained by the [Stape Team](https://stape.io/) under the Apache 2.0 license.
+
+### GTM Gallery Status
+🟢 [Listed](https://tagmanager.google.com/gallery/#/owners/stape-io/templates/md5-hash-variable)
