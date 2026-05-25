@@ -35,101 +35,6 @@ ___TEMPLATE_PARAMETERS___
         "type": "NON_EMPTY"
       }
     ]
-  },
-  {
-    "displayName": "Logs Settings",
-    "name": "logsGroup",
-    "groupStyle": "ZIPPY_CLOSED",
-    "type": "GROUP",
-    "subParams": [
-      {
-        "type": "RADIO",
-        "name": "logType",
-        "radioItems": [
-          {
-            "value": "no",
-            "displayValue": "Do not log"
-          },
-          {
-            "value": "debug",
-            "displayValue": "Log to console during debug and preview"
-          },
-          {
-            "value": "always",
-            "displayValue": "Always log to console"
-          }
-        ],
-        "simpleValueType": true,
-        "defaultValue": "debug"
-      }
-    ]
-  },
-  {
-    "displayName": "BigQuery Logs Settings",
-    "name": "bigQueryLogsGroup",
-    "groupStyle": "ZIPPY_CLOSED",
-    "type": "GROUP",
-    "subParams": [
-      {
-        "type": "RADIO",
-        "name": "bigQueryLogType",
-        "radioItems": [
-          {
-            "value": "no",
-            "displayValue": "Do not log to BigQuery"
-          },
-          {
-            "value": "always",
-            "displayValue": "Log to BigQuery"
-          }
-        ],
-        "simpleValueType": true,
-        "defaultValue": "no"
-      },
-      {
-        "type": "GROUP",
-        "name": "logsBigQueryConfigGroup",
-        "groupStyle": "NO_ZIPPY",
-        "subParams": [
-          {
-            "type": "TEXT",
-            "name": "logBigQueryProjectId",
-            "displayName": "BigQuery Project ID",
-            "simpleValueType": true,
-            "help": "Optional.  \u003cbr\u003e\u003cbr\u003e  If omitted, it will be retrieved from the environment variable \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e where the server container is running. If the server container is running on Google Cloud, \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e will already be set to the Google Cloud project\u0027s ID."
-          },
-          {
-            "type": "TEXT",
-            "name": "logBigQueryDatasetId",
-            "displayName": "BigQuery Dataset ID",
-            "simpleValueType": true,
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              }
-            ]
-          },
-          {
-            "type": "TEXT",
-            "name": "logBigQueryTableId",
-            "displayName": "BigQuery Table ID",
-            "simpleValueType": true,
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              }
-            ]
-          }
-        ],
-        "enablingConditions": [
-          {
-            "paramName": "bigQueryLogType",
-            "paramValue": "always",
-            "type": "EQUALS"
-          }
-        ]
-      }
-    ]
   }
 ]
 
@@ -144,14 +49,9 @@ const createRegex = require('createRegex');
 const testRegex = require('testRegex');
 const sendHttpRequest = require('sendHttpRequest');
 const JSON = require('JSON');
-const logToConsole = require('logToConsole');
-const getContainerVersion = require('getContainerVersion');
-const BigQuery = require('BigQuery');
-const getTimestampMillis = require('getTimestampMillis');
 
-/**********************************************************************************************/
-
-const traceId = getRequestHeader('trace-id');
+/*==============================================================================
+==============================================================================*/
 
 let inputValue = data.inputValue;
 
@@ -160,10 +60,10 @@ if (!isValidValue(inputValue)) return;
 inputValue = makeString(inputValue);
 
 if (isMD5Hash(inputValue)) return inputValue;
-
 return hash(inputValue);
 
-/**********************************************************************************************/
+/*==============================================================================
+==============================================================================*/
 
 function hash(value) {
   const requestUrl = getRequestUrl();
@@ -171,36 +71,14 @@ function hash(value) {
     value: value
   };
 
-  log({
-    Name: 'MD5 Hash',
-    Type: 'Request',
-    TraceId: traceId,
-    EventName: 'hash',
-    RequestMethod: 'POST',
-    RequestUrl: requestUrl,
-    RequestBody: requestBody
-  });
-
-  return sendHttpRequest(
-    requestUrl,
-    { method: 'POST' },
-    JSON.stringify(requestBody)
-  ).then((result) => {
-    log({
-      Name: 'MD5 Hash',
-      Type: 'Response',
-      TraceId: traceId,
-      EventName: 'hash',
-      ResponseStatusCode: result.statusCode,
-      ResponseHeaders: result.headers,
-      ResponseBody: result.body
-    });
-
-    if (result.statusCode >= 200 && result.statusCode < 300) {
-      const hashedValue = JSON.parse(result.body).body.hash;
-      return hashedValue;
+  return sendHttpRequest(requestUrl, { method: 'POST' }, JSON.stringify(requestBody)).then(
+    (result) => {
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        const hashedValue = JSON.parse(result.body).body.hash;
+        return hashedValue;
+      }
     }
-  });
+  );
 }
 
 function getRequestUrl() {
@@ -219,12 +97,13 @@ function getRequestUrl() {
   );
 }
 
-/**********************************************************************************************/
-// Helpers
+/*==============================================================================
+  Helpers
+==============================================================================*/
 
 function isValidValue(value) {
   const valueType = getType(value);
-  return valueType !== 'null' && valueType !== 'undefined' && value !== '';
+  return valueType !== 'null' && valueType !== 'undefined' && value !== '' && value === value;
 }
 
 function isMD5Hash(str) {
@@ -233,99 +112,8 @@ function isMD5Hash(str) {
 }
 
 function enc(data) {
-  return encodeUriComponent(data || '');
-}
-
-function log(rawDataToLog) {
-  const logDestinationsHandlers = {};
-  if (determinateIsLoggingEnabled())
-    logDestinationsHandlers.console = logConsole;
-  if (determinateIsLoggingEnabledForBigQuery())
-    logDestinationsHandlers.bigQuery = logToBigQuery;
-
-  const keyMappings = {
-    // No transformation for Console is needed.
-    bigQuery: {
-      Name: 'tag_name',
-      Type: 'type',
-      TraceId: 'trace_id',
-      EventName: 'event_name',
-      RequestMethod: 'request_method',
-      RequestUrl: 'request_url',
-      RequestBody: 'request_body',
-      ResponseStatusCode: 'response_status_code',
-      ResponseHeaders: 'response_headers',
-      ResponseBody: 'response_body'
-    }
-  };
-
-  for (const logDestination in logDestinationsHandlers) {
-    const handler = logDestinationsHandlers[logDestination];
-    if (!handler) continue;
-
-    const mapping = keyMappings[logDestination];
-    const dataToLog = mapping ? {} : rawDataToLog;
-
-    if (mapping) {
-      for (const key in rawDataToLog) {
-        const mappedKey = mapping[key] || key;
-        dataToLog[mappedKey] = rawDataToLog[key];
-      }
-    }
-
-    handler(dataToLog);
-  }
-}
-
-function logConsole(dataToLog) {
-  logToConsole(JSON.stringify(dataToLog));
-}
-
-function logToBigQuery(dataToLog) {
-  const connectionInfo = {
-    projectId: data.logBigQueryProjectId,
-    datasetId: data.logBigQueryDatasetId,
-    tableId: data.logBigQueryTableId
-  };
-
-  dataToLog.timestamp = getTimestampMillis();
-
-  ['request_body', 'response_headers', 'response_body'].forEach((p) => {
-    dataToLog[p] = JSON.stringify(dataToLog[p]);
-  });
-
-  const bigquery =
-    getType(BigQuery) === 'function'
-      ? BigQuery() /* Only during Unit Tests */
-      : BigQuery;
-  bigquery.insert(connectionInfo, [dataToLog], { ignoreUnknownValues: true });
-}
-
-function determinateIsLoggingEnabled() {
-  const containerVersion = getContainerVersion();
-  const isDebug = !!(
-    containerVersion &&
-    (containerVersion.debugMode || containerVersion.previewMode)
-  );
-
-  if (!data.logType) {
-    return isDebug;
-  }
-
-  if (data.logType === 'no') {
-    return false;
-  }
-
-  if (data.logType === 'debug') {
-    return isDebug;
-  }
-
-  return data.logType === 'always';
-}
-
-function determinateIsLoggingEnabledForBigQuery() {
-  if (data.bigQueryLogType === 'no') return false;
-  return data.bigQueryLogType === 'always';
+  if (['null', 'undefined'].indexOf(getType(data)) !== -1) data = '';
+  return encodeUriComponent(makeString(data));
 }
 
 
@@ -344,21 +132,6 @@ ___SERVER_PERMISSIONS___
           "value": {
             "type": 2,
             "listItem": [
-              {
-                "type": 3,
-                "mapKey": [
-                  {
-                    "type": 1,
-                    "string": "headerName"
-                  }
-                ],
-                "mapValue": [
-                  {
-                    "type": 1,
-                    "string": "trace-id"
-                  }
-                ]
-              },
               {
                 "type": 3,
                 "mapKey": [
@@ -445,37 +218,6 @@ ___SERVER_PERMISSIONS___
   {
     "instance": {
       "key": {
-        "publicId": "logging",
-        "versionId": "1"
-      },
-      "param": [
-        {
-          "key": "environments",
-          "value": {
-            "type": 1,
-            "string": "all"
-          }
-        }
-      ]
-    },
-    "clientAnnotations": {
-      "isEditedByUser": true
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
-        "publicId": "read_container_data",
-        "versionId": "1"
-      },
-      "param": []
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
         "publicId": "send_http",
         "versionId": "1"
       },
@@ -485,67 +227,6 @@ ___SERVER_PERMISSIONS___
           "value": {
             "type": 1,
             "string": "any"
-          }
-        }
-      ]
-    },
-    "clientAnnotations": {
-      "isEditedByUser": true
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
-        "publicId": "access_bigquery",
-        "versionId": "1"
-      },
-      "param": [
-        {
-          "key": "allowedTables",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 3,
-                "mapKey": [
-                  {
-                    "type": 1,
-                    "string": "projectId"
-                  },
-                  {
-                    "type": 1,
-                    "string": "datasetId"
-                  },
-                  {
-                    "type": 1,
-                    "string": "tableId"
-                  },
-                  {
-                    "type": 1,
-                    "string": "operation"
-                  }
-                ],
-                "mapValue": [
-                  {
-                    "type": 1,
-                    "string": "*"
-                  },
-                  {
-                    "type": 1,
-                    "string": "*"
-                  },
-                  {
-                    "type": 1,
-                    "string": "*"
-                  },
-                  {
-                    "type": 1,
-                    "string": "write"
-                  }
-                ]
-              }
-            ]
           }
         }
       ]
@@ -581,48 +262,114 @@ scenarios:
     assertThat(variableResult).isEqualTo(hashedInputValue);
 - name: Input value is valid, but this Stape account DOES NOT support MD5 hashing
     through this endpoint, should return undefined
-  code: "const JSON = require('JSON');\n\nmockData.inputValue = 'test@example.com';\n\
-    const expectedHashedValue = '55502f40dc8b7c769880b10874abc9d0';\n\nconst expectedXGtmHeadersValue\
-    \ = 'xgtm';\nconst expectedXGtmHeaders = {\n  'x-gtm-identifier': expectedXGtmHeadersValue,\n\
-    \  'x-gtm-default-domain': expectedXGtmHeadersValue,\n  'x-gtm-api-key': expectedXGtmHeadersValue\n\
-    };\n\nconst expectedRequestUrl = 'https://' + expectedXGtmHeaders['x-gtm-identifier']\
-    \ + '.' + expectedXGtmHeaders['x-gtm-default-domain'] + '/stape-api/' + expectedXGtmHeaders['x-gtm-api-key']\
-    \ + '/v1/hash/md5';\nconst expectedRequestOptions = { method: 'POST' };\nconst\
-    \ expectedRequestBody = JSON.stringify({ value: mockData.inputValue });\n\nmock('getRequestHeader',\
-    \ (header) => {\n  switch (header) {\n    case 'x-gtm-identifier':\n    case 'x-gtm-default-domain':\n\
-    \    case 'x-gtm-api-key':\n      return expectedXGtmHeaders[header];\n    default:\n\
-    \      return 'header-mocked-value';\n  }\n});\n\nmock('sendHttpRequest', (requestUrl,\
-    \ requestOptions, requestBody) => {\n  assertThat(requestUrl).isEqualTo(expectedRequestUrl);\n\
-    \  assertThat(requestOptions).isEqualTo(expectedRequestOptions);\n  assertThat(requestBody).isEqualTo(expectedRequestBody);\n\
-    \  return { \n    then: (callback) => {\n      const result = {\n        statusCode:\
-    \ 404,\n        body: \"{\\\"body\\\":[],\\\"error\\\":{\\\"code\\\":404,\\\"\
-    message\\\":\\\"No route found for \\\\\\\"POST https:\\\\/\\\\/foobar.stape.net\\\
-    \\/stape-api\\\\/123456789foobar\\\\/v1\\\\/hash\\\\/md5\\\\\\\"\\\"}}\"\n   \
-    \   };\n      \n      return callback(result);\n    } \n  };\n});\n\nconst variableResult\
-    \ = runCode(mockData);\n\nassertThat(variableResult).isUndefined();"
+  code: |-
+    const JSON = require('JSON');
+
+    mockData.inputValue = 'test@example.com';
+    const expectedHashedValue = '55502f40dc8b7c769880b10874abc9d0';
+
+    const expectedXGtmHeadersValue = 'xgtm';
+    const expectedXGtmHeaders = {
+      'x-gtm-identifier': expectedXGtmHeadersValue,
+      'x-gtm-default-domain': expectedXGtmHeadersValue,
+      'x-gtm-api-key': expectedXGtmHeadersValue
+    };
+
+    const expectedRequestUrl = 'https://' + expectedXGtmHeaders['x-gtm-identifier'] + '.' + expectedXGtmHeaders['x-gtm-default-domain'] + '/stape-api/' + expectedXGtmHeaders['x-gtm-api-key'] + '/v1/hash/md5';
+    const expectedRequestOptions = { method: 'POST' };
+    const expectedRequestBody = JSON.stringify({ value: mockData.inputValue });
+
+    mock('getRequestHeader', (header) => {
+      switch (header) {
+        case 'x-gtm-identifier':
+        case 'x-gtm-default-domain':
+        case 'x-gtm-api-key':
+          return expectedXGtmHeaders[header];
+        default:
+          return 'header-mocked-value';
+      }
+    });
+
+    mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+      assertThat(requestUrl).isEqualTo(expectedRequestUrl);
+      assertThat(requestOptions).isEqualTo(expectedRequestOptions);
+      assertThat(requestBody).isEqualTo(expectedRequestBody);
+      return Promise.create((resolve) => {
+        resolve({
+          statusCode: 404,
+          body: "{\"body\":[],\"error\":{\"code\":404,\"message\":\"No route found for \\\"POST https:\\/\\/foobar.stape.net\\/stape-api\\/123456789foobar\\/v1\\/hash\\/md5\\\"\"}}"
+        });
+      });
+    });
+
+    runCode(mockData).then((variableResult) => {
+      assertThat(variableResult).isUndefined();
+    });
 - name: Input value is valid, and the Stape account supports MD5 hashing through this
     endpoint, should return the hashed value
-  code: "const JSON = require('JSON');\n\nmockData.inputValue = 'test@example.com';\n\
-    const expectedHashedValue = '55502f40dc8b7c769880b10874abc9d0';\n\nconst expectedXGtmHeadersValue\
-    \ = 'xgtm';\nconst expectedXGtmHeaders = {\n  'x-gtm-identifier': expectedXGtmHeadersValue,\n\
-    \  'x-gtm-default-domain': expectedXGtmHeadersValue,\n  'x-gtm-api-key': expectedXGtmHeadersValue\n\
-    };\n\nconst expectedRequestUrl = 'https://' + expectedXGtmHeaders['x-gtm-identifier']\
-    \ + '.' + expectedXGtmHeaders['x-gtm-default-domain'] + '/stape-api/' + expectedXGtmHeaders['x-gtm-api-key']\
-    \ + '/v1/hash/md5';\nconst expectedRequestOptions = { method: 'POST' };\nconst\
-    \ expectedRequestBody = JSON.stringify({ value: mockData.inputValue });\n\nmock('getRequestHeader',\
-    \ (header) => {\n  switch (header) {\n    case 'x-gtm-identifier':\n    case 'x-gtm-default-domain':\n\
-    \    case 'x-gtm-api-key':\n      return expectedXGtmHeaders[header];\n    default:\n\
-    \      return 'header-mocked-value';\n  }\n});\n\nmock('sendHttpRequest', (requestUrl,\
-    \ requestOptions, requestBody) => {\n  assertThat(requestUrl).isEqualTo(expectedRequestUrl);\n\
-    \  assertThat(requestOptions).isEqualTo(expectedRequestOptions);\n  assertThat(requestBody).isEqualTo(expectedRequestBody);\n\
-    \  return { \n    then: (callback) => {\n      const result = {\n        statusCode:\
-    \ 200,\n        body: JSON.stringify({ body: { hash: expectedHashedValue, value:\
-    \ mockData.inputValue } })\n      };\n      \n      return callback(result);\n\
-    \    } \n  };\n});\n\nconst variableResult = runCode(mockData);\n\nassertThat(variableResult).isEqualTo(expectedHashedValue);"
-setup: const mockData = {};
+  code: |-
+    const JSON = require('JSON');
+
+    mockData.inputValue = 'test@example.com';
+    const expectedHashedValue = '55502f40dc8b7c769880b10874abc9d0';
+
+    const expectedXGtmHeadersValue = 'xgtm';
+    const expectedXGtmHeaders = {
+      'x-gtm-identifier': expectedXGtmHeadersValue,
+      'x-gtm-default-domain': expectedXGtmHeadersValue,
+      'x-gtm-api-key': expectedXGtmHeadersValue
+    };
+
+    const expectedRequestUrl = 'https://' + expectedXGtmHeaders['x-gtm-identifier'] + '.' + expectedXGtmHeaders['x-gtm-default-domain'] + '/stape-api/' + expectedXGtmHeaders['x-gtm-api-key'] + '/v1/hash/md5';
+    const expectedRequestOptions = { method: 'POST' };
+    const expectedRequestBody = JSON.stringify({ value: mockData.inputValue });
+
+    mock('getRequestHeader', (header) => {
+      switch (header) {
+        case 'x-gtm-identifier':
+        case 'x-gtm-default-domain':
+        case 'x-gtm-api-key':
+          return expectedXGtmHeaders[header];
+        default:
+          return 'header-mocked-value';
+      }
+    });
+
+    mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+      assertThat(requestUrl).isEqualTo(expectedRequestUrl);
+      assertThat(requestOptions).isEqualTo(expectedRequestOptions);
+      assertThat(requestBody).isEqualTo(expectedRequestBody);
+      return Promise.create((resolve) => {
+        resolve({
+          statusCode: 200,
+          body: JSON.stringify({ body: { hash: expectedHashedValue, value: mockData.inputValue } })
+        });
+      });
+    });
+
+    const variableResult = runCode(mockData);
+
+    runCode(mockData).then((variableResult) => {
+      assertThat(variableResult).isEqualTo(expectedHashedValue);
+    });
+setup: |-
+  const Promise = require('Promise');
+
+  const mockData = {};
+
+  mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+    return Promise.create((resolve) => {
+      resolve({
+        statusCode: 404,
+        body: "{\"body\":[],\"error\":{\"code\":404,\"message\":\"No route found for \\\"POST https:\\/\\/foobar.stape.net\\/stape-api\\/123456789foobar\\/v1\\/hash\\/md5\\\"\"}}"
+      });
+    });
+  });
 
 
 ___NOTES___
 
-Created on 4/14/2025, 1:48:32 PM
+2026-05-21 Change Notes:
+ - Console logging removal.
 
+Created on 4/14/2025, 1:48:32 PM
