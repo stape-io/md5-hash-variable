@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/md5-hash-variable'
 versions:
+  - sha: e696a82ea44a66b713f3332c4fe5ea8dad5bff36
+    changeNotes: Request headers, error handling, caching, and input validation fix.
   - sha: 1d77f00d1230cb153707b1beb6aff84b167c1930
     changeNotes: Console logging removal.
   - sha: 6721c7a5218095c80dd1805e1275296cfc4ae260
