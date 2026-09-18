@@ -13,6 +13,8 @@ The **MD5 Hash Variable** for Google Tag Manager Server Container allows you to 
 ## Parameters
 
 - **Value to be Hashed**: The string or value you want to convert to an MD5 hash.
+- **Store hashed value in cache**: Enabled by default. Hashed values are cached to avoid unwanted additional network requests.
+  - **Cache Expiration Time**: How many hours a cached hashed value stays valid. Defaults to `24`.
 
 ## Example Input & Output
 
